@@ -16,14 +16,14 @@ class _FakeQuery:
     def __init__(self, table_name: str, store: dict):
         self._table_name = table_name
         self._store = store
-        self._code = None
+        self._short_code = None
 
     def select(self, *_args, **_kwargs):
         return self
 
     def eq(self, _column: str, value: str):
-        # จำค่า code ไว้สำหรับ maybe_single/single
-        self._code = value
+        # จำค่า short_code ไว้สำหรับ maybe_single/single
+        self._short_code = value
         return self
 
     def maybe_single(self):
@@ -32,14 +32,20 @@ class _FakeQuery:
     def single(self):
         return self
 
+    def limit(self, _n: int):
+        # main.py calls .limit(1); no-op for fake
+        return self
+
     def execute(self):
         if self._table_name == "urls":
-            if self._code is None:
+            if self._short_code is None:
                 return _FakeQueryResult(data=None, error=None)
-            url = self._store.get(self._code)
+            url = self._store.get(self._short_code)
             if url is None:
                 return _FakeQueryResult(data=None, error=None)
-            return _FakeQueryResult(data={"code": self._code, "url": url}, error=None)
+            return _FakeQueryResult(
+                data={"short_code": self._short_code, "long_url": url}, error=None
+            )
         return _FakeQueryResult(data=None, error=None)
 
 
@@ -71,8 +77,8 @@ class _FakeTable:
         return types.SimpleNamespace(execute=self._do_insert)
 
     def _do_insert(self):
-        code = self._pending["code"]
-        url = self._pending["url"]
+        code = self._pending["short_code"]
+        url = self._pending["long_url"]
         self._store[code] = url
         return _FakeQueryResult(data=self._pending, error=None)
 
