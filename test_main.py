@@ -1,4 +1,5 @@
 import types
+import random
 
 from fastapi.testclient import TestClient
 
@@ -103,8 +104,50 @@ def test_shorten_and_redirect(monkeypatch):
 
     code = body["code"]
 
-    # ตรวจ redirect ด้วย code ที่ได้
-    redirect_resp = client.get(f"/{code}", allow_redirects=False)
+    # ตรวจ redirect ด้วย code ที่ได้ (ไม่ตาม redirect)
+    redirect_resp = client.get(f"/{code}", follow_redirects=False)
     assert redirect_resp.status_code == 307
     assert redirect_resp.headers["location"] == target_url
+
+
+def test_redirect_not_found(monkeypatch):
+    # supabase ว่างเปล่า -> code ไหน ๆ ก็ไม่มีใน DB
+    fake = _FakeSupabase()
+    monkeypatch.setattr(main, "supabase", fake)
+
+    client = TestClient(main.app)
+
+    resp = client.get("/UNKNOWN", follow_redirects=False)
+    assert resp.status_code == 404
+    assert resp.json()["detail"] == "ไม่พบโค้ดนี้"
+
+
+def test_shorten_handles_code_collision(monkeypatch):
+    # จำลองให้ random.choices คืนค่า code ซ้ำ แล้วค่อยเปลี่ยนเป็นอันใหม่
+    fake_supabase = _FakeSupabase()
+    monkeypatch.setattr(main, "supabase", fake_supabase)
+
+    codes = ["ABC123", "ABC123", "XYZ789"]
+
+    def fake_choices(_population, k):
+        # คืนค่าทีละตัวจากลิสต์ด้านบน
+        return list(codes.pop(0))
+
+    monkeypatch.setattr(random, "choices", fake_choices)
+
+    client = TestClient(main.app)
+
+    # ครั้งแรกได้ ABC123
+    resp1 = client.post("/shorten", params={"url": "https://example.com/1"})
+    assert resp1.status_code == 200
+    code1 = resp1.json()["code"]
+    assert code1 == "ABC123"
+
+    # ครั้งที่สอง: เจอ collision (ABC123) แล้ววนไปได้ XYZ789
+    resp2 = client.post("/shorten", params={"url": "https://example.com/2"})
+    assert resp2.status_code == 200
+    code2 = resp2.json()["code"]
+    assert code2 == "XYZ789"
+
+    assert code1 != code2
 
