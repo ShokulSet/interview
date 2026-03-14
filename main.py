@@ -7,6 +7,10 @@ app = FastAPI()
 # โจทย์ 1: เชื่อมต่อ Supabase (ให้เขาเติมแค่บรรทัดเดียว)
 # TODO: supabase = create_client(url, key)
 
+@app.get("/")
+async def read_root():
+    return {"message": "Welcome to the URL Shortener API"}
+
 @app.post("/shorten")
 async def shorten(url: str):
     # โจทย์ 2: รับ URL มาแล้ว Generate code เก็บลง DB
